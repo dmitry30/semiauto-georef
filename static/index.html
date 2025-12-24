@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Georeferencer</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Simple Georeferencer</h1>
+        <p>Загрузите снимок и кликните на карте, чтобы указать приблизительное местоположение</p>
+        
+        <div class="row">
+            <div class="column">
+                <div id="map" style="height: 500px; width: 100%;"></div>
+                <div id="coords">Координаты: не указаны</div>
+                
+                <form id="uploadForm">
+                    <div class="form-group">
+                        <label for="imageFile">Выберите изображение:</label>
+                        <input type="file" id="imageFile" name="file" accept=".jpg,.jpeg,.png,.tif,.tiff" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="lat">Широта:</label>
+                        <input type="number" id="lat" name="lat" step="any" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="lon">Долгота:</label>
+                        <input type="number" id="lon" name="lon" step="any" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="zoom">Масштаб (zoom 10-20):</label>
+                        <input type="range" id="zoom" name="zoom" min="10" max="20" value="18">
+                        <span id="zoomValue">18</span>
+                    </div>
+                    
+                    <button type="submit" id="submitBtn">Привязать снимок</button>
+                </form>
+            </div>
+            
+            <div class="column">
+                <div id="result">
+                    <h3>Результат:</h3>
+                    <div id="status"></div>
+                    <div id="links"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация карты
+        const map = L.map('map').setView([55.7558, 37.6173], 13); // Москва по умолчанию
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        let marker = null;
+        
+        // Обработчик клика по карте
+        map.on('click', function(e) {
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+            
+            document.getElementById('lat').value = lat.toFixed(6);
+            document.getElementById('lon').value = lon.toFixed(6);
+            document.getElementById('coords').textContent = 
+                `Координаты: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+            
+            if (marker) {
+                map.removeLayer(marker);
+            }
+            
+            marker = L.marker([lat, lon]).addTo(map)
+                .bindPopup(`Привязка здесь<br>${lat.toFixed(6)}, ${lon.toFixed(6)}`)
+                .openPopup();
+        });
+        
+        // Обновление значения zoom
+        document.getElementById('zoom').addEventListener('input', function(e) {
+            document.getElementById('zoomValue').textContent = e.target.value;
+        });
+        
+        // Обработчик формы
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('imageFile');
+            const lat = document.getElementById('lat').value;
+            const lon = document.getElementById('lon').value;
+            const zoom = document.getElementById('zoom').value;
+            //const statusDiv = document.getElementById('status');
+            
+            
+            if (!fileInput.files[0]) {
+                alert('Пожалуйста, выберите файл');
+                return;
+            }
+            
+            formData.append('file', fileInput.files[0]);
+            formData.append('lat', lat);
+            formData.append('lon', lon);
+            formData.append('zoom', zoom);
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Обработка...';
+            
+            const statusDiv = document.getElementById('status');
+            const linksDiv = document.getElementById('links');
+            
+            //statusDiv.innerHTML = '<div class="loading">Обработка изображения...</div>';
+            statusDiv.innerHTML = '<div class="loading"><div>Обработка изображения...</div><div id="progress">Шаг 1/4: Загрузка...</div></div>';
+            linksDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/upload/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerHTML = `<div class="success">${result.message}</div>`;
+                    linksDiv.innerHTML = `
+                        <p><a href="${result.download_url}" target="_blank">Скачать GeoTIFF</a></p>
+                        <p><a href="${result.metadata_url}" target="_blank">Скачать метаданные (JSON)</a></p>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `<div class="error">Ошибка: ${result.detail}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">Ошибка: ${error.message}</div>`;
+                console.error('Upload error:', error);
+                //statusDiv.innerHTML = `<div class="error">Ошибка сети: ${error.message}</div>`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Привязать снимок';
+            }
+        });
+    </script>
+</body>
+</html>
