@@ -1,0 +1,11 @@
+services:
+  georeferencer:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./temp:/app/temp
+      - ./static:/app/static
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
